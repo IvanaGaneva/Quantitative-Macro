@@ -1,0 +1,1315 @@
+---
+title: "Quantitative Macroeconomics"
+subtitle: 'Homework I'
+author: Ivana Kaloyanova Ganeva
+date: September 28, 2020
+output: 
+  html_document:
+    toc: false
+    theme: journal
+    highlight: tango
+---
+
+# Labour Market and COVID-19 {.tabset}
+
+## the USA {.tabset}
+
+### Data & Preliminaries
+As required, for the replication of figures and for the analysis of the impact of COVID-19 on the Labour Market in the USA, I will rely on the IPUMS Current Population Survey (CPS) monthly data which can be found [here](https://cps.ipums.org/cps-action/variables/group).
+
+> Sarah Flood, Miriam King, Renae Rodgers, Steven Ruggles and J. Robert Warren. Integrated Public Use Microdata Series, Current Population Survey: Version 7.0 [dataset]. Minneapolis, MN: IPUMS, 2020. *https://doi.org/10.18128/D030.V7.0*
+
+The original data file which I extracted contains over 4.25 mln observations on 18 variables, and it covers the CPS data for all months of 2018, 2019, and 2020 available. The size of this data file amounts to more than 35 MB and for the sake of faster execution, I will refrain from using its original version in this report. Instead, I create an R data file which is much easier/faster to load, which I call to the environment using the code below.
+
+```{r, warning = F, message = F}
+# UNCOMMENT THESE TWO LINES TO (RE-)CREATE THE RData FILE
+# CPS_full_df <- read.csv('CPS_original_df.csv')
+# save(CPS_full_df, file = "CPS_df.RData")
+
+library(tidyverse)
+library(zoo)
+load('CPS_df.RData')
+
+# Getting a glimpse of our initial data set:
+head(CPS_full_df)
+
+# It is a data frame of over 4.25 mln observations on 18 variables:
+dim(CPS_full_df)
+```
+
+
+### The Employment Rate {.tabset}
+As usual, the Employment Rate for a given time is calculated using the formula of:
+\[
+\text{Employment_Rate}_t = \dfrac{\text{Number_of_Employed_Persons}_t}{\text{Size_of_Labour_Force}_t} \, .
+\]
+We derive the number of employed persons as well as the number of people in the labour force for all the months avialable on 2018-2020 from the *EMPSTAT* variable of the CPS data set. To be precise, the number of employed persons is the sum of all people at work at the reference week, and all people who have a job, but were not at work the work before the reference week. Likewise, the size of the labour force is calculated by adding together the number of unemployed experienced workers and the number of unemployed new workers.
+
+#### Fitted vs. COVID-19 Values
+```{r echo = F, warning = F, message = F}
+# The data frame used for the replication of the first set of plots: 
+df1 <- CPS_full_df %>%
+  select(YEAR, MONTH, EMPSTAT) %>%
+  filter(EMPSTAT %in% c(10, 12, 21, 22)) %>%
+  group_by(YEAR, MONTH, EMPSTAT) %>%
+  summarise(count = n()) %>% 
+  spread(key = EMPSTAT, value = count) %>%
+  # Summing up based on the IPUMS coding
+  mutate(empl_pers = `10`+`12`, LF = `10` + `12` + `21` + `22`) %>%
+  mutate(empl_rate = empl_pers/LF) %>%
+  select(YEAR, MONTH, empl_rate) %>%
+  ungroup() %>%
+  mutate(MONTH = str_pad(as.character(MONTH), 2, pad = '0')) %>%
+  mutate(TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)),
+                        format = '%Y-%m')) %>%
+  mutate(MONTH = as.factor(MONTH))
+
+mod1 <- lm(empl_rate ~ MONTH, data = df1[df1$YEAR < 2020,])
+
+df1$Predict <- c(rep(NA, 24),
+                 predict(mod1, newdata = df1[df1$YEAR > 2019,]))
+df1$lbl <- c(rep('pre-COVID', 24),
+               rep('COVID', 8))
+df1$lbl_pr <- c(rep(NA, 24),
+                rep('Predictions', 8))
+
+pl1_1 <- ggplot(df1, aes(x = TIME, col = lbl)) +
+  geom_point(aes(y = empl_rate)) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') + 
+  scale_y_continuous(breaks = seq(0.85, 0.975, .0125),
+                     labels = scales::percent,
+                     limits = c(0.85, 0.975)) +
+  geom_point(aes(y = df1$Predict, col = lbl_pr)) +
+  theme_bw() +
+  xlab('') +
+  ylab('Employment Rate, %') +
+  ggtitle("Employment Rate Figure Replica") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'bottom',
+        legend.justification = 'right',
+        legend.background = element_rect(fill = '#425359', size = 3),
+        legend.text = element_text(size = 15, color = 'white'))
+  
+df1 <- df1 %>%
+  mutate(diff_perc = (empl_rate - Predict)*100)
+
+pl1_2 <- ggplot(filter(df1, !(is.na(diff_perc))), 
+                aes(x = TIME, y = diff_perc)) +
+  geom_line(col = 'aquamarine4', size = 2) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '1 month') + 
+  scale_y_continuous(breaks = seq(-10, 1.25, 1.25)) +
+  # geom_point(aes(y = df1$Predict, col = lbl_pr)) +
+  theme_bw() +
+  xlab('') +
+  ylab('Difference in Employment Rate, %') +
+  ggtitle("Prediction-Reality Gap") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'none')
+
+pl1_1
+```
+
+In this plot, the green dots represent the true observations for the empployment rate for the years of 2018 and 2019. We observe that there is some tanglible monthly seasonality in this data. Therefore, a linear model with dummy variables for the months is fitted to the data, as advised. The predicted one-step ahead values (averages) suggested by this model are plotted in blue. These fitted values appear to be very much 'in-line' with the previously observed data, however, they are far from the true realizations of the employment rate variable in 2020. This difference is depicted on the following plot and gives a first glance into the momentousness of the consequences for the labour market due to the outbreak of COVID-19.
+
+```{r, echo = F}
+pl1_2
+```
+
+The percentage points difference between the expected levels of employment and the true realizations in 2020 has undergone some changes. At the begining of the year, when the COVID-19 was not yet vastly spread worldwide (and consequently in the US), there was a positive trend for the employment rates as the realizations were higher than 'expected' by the simple linear model. In March, however, following the WHO declarement for a pandemic, the US labour force exhibited a drastic fall from the previous month's levels of employment - the typical seasonality indicates that values were instead expected to rise from the beginning of the year until around May.
+
+The largest drop from the expected levels was in April, when the official unemployment rate in the US amounted to 14.7% - namely, the highest unemployment level since the Great Depression. This employment rate was more than 10 p.p. lower than the 'usual' values for this time of the year. Official datafrom the Bureau of Labor Statistics shows that more than 23 mln Americans were either unemployed, furloughed, or on a temporary layoff in mid-April. This tremendous increase was very drastic and was mostly due to the initial shocks to the economy caused by the COVID-19 outbreak - the broad shutdowns of economic activity and the suspension of most works and jobs which were not vital. Back then, some economists alarmed that the official unemployment rates that had been reported might turn out to be in fact underestimates of the reality in the US. The latter is linked to the large percentage of people who are still somehow attached to their work positions, but are still waiting for an indefinite period for their jobs to be resumed.
+
+It is observable that the unemployment rates began to gradually decrease following this lowest point in April - the levels of employment have since gotten higher, just like the difference between the predicted values and the true realizations. This increase in the employment rate could be most probably well explained by the rebound in some economic activities. That is, the quick introduction of teleworking and other suitable flexible arrangements to some up until then in-person and at-the-office jobs have given the chance for businesses to minimize losses as much as possible and avoid going bankrupt. Furthermore, as lockdowns and shutdowns begin to slowly lift, more firms and employees are provided the opportunity to resume work - restaurants & cafés, theaters & concert halls, beauty saloons & barber shops etc.
+
+
+#### By Education
+For the exploration of the distributional effects by education group, I will use the *EDUC* variable in the IPUMS CPS data. Based on the variable description provided on the website, I will split the observations into four categories based on the highest educational degree achieved: persons with less than a high school degree; persons with a high school degree (or a professional school degree); persons in a college degree (up to Bachelor's degree included); persons with more than a college degree (Master's, post-doctoral studies completed, etc.).
+
+```{r echo = F, warning = F, message = F}
+df2 <- CPS_full_df %>%
+  select(YEAR, MONTH, EMPSTAT, EDUC) %>%
+  #########################################
+  filter(EMPSTAT %in% c(10, 12, 21, 22)) %>%
+  #
+  filter(EDUC != 1) %>%
+  # filtering out the missing values
+  group_by(YEAR, MONTH, EMPSTAT, EDUC) %>%
+  summarise(count = n()) %>%
+  spread(key = EDUC, value = count) %>%
+  # summing up for the four categories on education:
+  mutate(lessHS = rowSums(cbind(`2`,`10`,`20`,`30`,`40`,`50`,`60`,`71`), 
+                          na.rm = T),
+         HS = rowSums(cbind(`73`,`81`,`124`), na.rm = T),
+         college = rowSums(cbind(`91`,`92`,`111`), na.rm = T),
+         college_plus = rowSums(cbind(`123`,`125`), na.rm = T)) %>%
+  select(YEAR, MONTH, EMPSTAT, lessHS, HS, college, college_plus) %>%
+  # now summarizing for employment rates:
+  gather(EDUC, count, 4:7) %>%
+  #########################################
+  spread(key = EMPSTAT, value = count) %>%
+  mutate(empl_pers = rowSums(cbind(`10`,`12`), na.rm = T), 
+         LF = rowSums(cbind(`10`,`12`,`21`,`22`), na.rm = T)) %>%
+  mutate(empl_rate = empl_pers/LF) %>%
+  select(YEAR, MONTH, EDUC, empl_rate) %>%
+  ungroup() %>%
+  mutate(MONTH = as.factor(MONTH), 
+         EDUC = factor(EDUC,
+                       levels = c('lessHS', 'HS', 'college', 'college_plus'),
+                       labels = c('< High School', 'High School', 'College', '> College')),
+         TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)), 
+                        format = '%Y-%m'))
+
+# Calculating the fitted values by groups:
+empl_educ_fun <- function(l){
+  temp <- df2 %>%
+    filter(EDUC == l)
+
+  mod_temp <- lm(empl_rate ~ MONTH, data = temp[temp$YEAR < 2020,])
+  
+  temp$Predict <- c(rep(NA, 24),
+                    predict(mod_temp, newdata = temp[temp$YEAR > 2019,]))
+  
+  return(temp)
+}
+
+to_merge_temp <- empl_educ_fun(levels(df2$EDUC)[1])
+
+for(i in levels(df2$EDUC)[2:length(levels(df2$EDUC))]){
+  to_merge_temp <- bind_rows(to_merge_temp, empl_educ_fun(i))
+}
+
+# Adding the fitted values to the original df:
+df2 <- left_join(df2, to_merge_temp)
+rm(to_merge_temp)
+
+ggplot(df2,
+       aes(x = TIME, group = EDUC, col = EDUC)) +
+  geom_point(aes(y = empl_rate)) +
+  geom_line(aes(y = Predict), size = 1, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') + 
+  scale_y_continuous(breaks = seq(0.7, 1, .025),
+                     labels = scales::percent,
+                     limits = c(0.7, 1)) +
+  theme_bw() +
+  xlab('') +
+  ylab('') +
+  ggtitle("Distributional Effects: Employment by Education Group") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'right')
+```
+
+In the plot above, the employment rate has been 'decomposed' by educational groups. It is tangible that the education level is positively correlated with the employment rate - i.e. for all monthly data in the preiod of interest, the higher the educational degree attanined, the lower the average unemployment rate in a group of people. College graduates and people who have post-college degrees have the lowest unemployment rates, and were moving almost hand in hand before 2020. The prediction lines for these two educational groups show that they were expected to have identical employment rates to each other. However, following the COVID-19 pandemic announcement in March, the gap between these two groups has multiplied. At the lowest employement levels measured in April, the gap between the four educational groups was the most severe, and more than a quarter of the people with less than a secondary school diploma were unemployed. The low-educated groups exhibited the biggest level drops at those times, but exhibited the fastest rates of rebound, when considering the Feb-Mar, 2020 values to be the reference ones.
+
+```{r echo = F, warning = F, message = F}
+df2 <- df2 %>%
+  mutate(diff_perc = (empl_rate - Predict)*100)
+
+ggplot(filter(df2, !(is.na(diff_perc))), 
+                aes(x = TIME, y = diff_perc, group = EDUC, col = EDUC)) +
+  geom_line(size = 2) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '1 month') + 
+  # scale_y_continuous(breaks = seq(-10, 1.25, 1.25)) +
+  # geom_point(aes(y = df1$Predict, col = lbl_pr)) +
+  theme_bw() +
+  xlab('') +
+  ylab('Difference in Employment Rate, %') +
+  ggtitle("Prediction-Reality Gap") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'right')
+```
+
+The noticeable difference within the employment rate dynamics and the overall average levels when breaking down the data by education is probably very much expected. Economic literature and empirics show and argue that there is indeed a strong positive association between high educational levels attained and employability, job security and taking a senior/key position at work. Despite the vast evidence in that direction, it is natural to ask whether and to what extent it was the 'hidden benefits' of the more educated population that surfaced to help them with enduring the COVID-19 crisis. That is, one would most likely be interested in the specific importance of having pursued a career path with more flexible working arrangements (including the possibility to telework).
+
+*The latter aspect will be briefly explored/discussed in the following sections of this report.*
+
+#### By Industry
+As advised, I will herewith, create two groups of industries according to their ability to telework. Instead of deciding which industries belong to which group myself, I will rely on the table from our class' Lecture Notes, i.e. on the ability to telework as calculated by Neimann and Dinjel (2020). In particular, based on the range of the teleworking ability in that table, I will consider a threshold of 0.3 to be determining of whether an industry should be considered more telework oriented or not.
+
+That is, there are five divisions as per the Standard Industrial Classification (SIC) in the USA which have a value of at least 0.3 in their ability to telework - namely, Public Administration (codes 9100-9729); Wholesale Trade (codes 5000-5199); Finance, Insurance and Real Estate (codes 6000-6799); and Services (apart from Personal Services, i.e. codes 7000-8999 without 7200). The last of these divisions contains three sub-categories as per Neimann and Dinjel (2020): Entertainment and Recreation Services; Professional and Related Services; and Business and Repair Services. These five divisions constitute the 'teleworkers' group.
+
+```{r echo = F, warning = F, message = F}
+# Creating the industry data frame:
+df3 <- CPS_full_df %>%
+  select(YEAR, MONTH, EMPSTAT, IND) %>%
+  #########################################
+  filter(EMPSTAT %in% c(10, 12, 21, 22)) %>%
+  filter(IND != 0) %>%
+  # filtering out the missing values
+  group_by(YEAR, MONTH, EMPSTAT, IND) %>%
+  summarise(count = n()) %>%
+  spread(key = IND, value = count) %>%
+  ungroup()
+
+  # summing up for the two industries based on telework:
+df3 <- df3 %>%
+  mutate(total = rowSums(df3[4:282], na.rm = T),
+         teleworkers = rowSums(select(df3, starts_with('7'), starts_with('50'),
+                                     starts_with('51'), starts_with('91'),
+                                     starts_with('92'), starts_with('93'),
+                                     starts_with('94'), starts_with('60'),
+                                     starts_with('61'), starts_with('62'),
+                                     starts_with('63'), starts_with('64'),
+                                     starts_with('65'), starts_with('66'),
+                                     starts_with('67'), starts_with('8')),
+                               na.rm = T) - `770`, 
+         non_teleworkers = total - teleworkers) %>%
+  select(YEAR, MONTH, EMPSTAT, teleworkers, non_teleworkers) %>%
+  # now summarizing for employment rates:
+  gather(TW, count, 4:5) %>%
+  #########################################
+  spread(key = EMPSTAT, value = count) %>%
+  mutate(empl_pers = rowSums(cbind(`10`,`12`), na.rm = T), 
+         LF = rowSums(cbind(`10`,`12`,`21`), na.rm = T)) %>%
+  mutate(empl_rate = empl_pers/LF) %>%
+  #
+  select(YEAR, MONTH, TW, empl_rate) %>%
+  mutate(MONTH = as.factor(MONTH), 
+         TW = factor(TW,
+                       levels = c('non_teleworkers', 'teleworkers'),
+                       labels = c('Low Telework Ability, < 0.3',
+                                  'High Telework Ability')),
+         TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)), 
+                        format = '%Y-%m'))
+
+# Calculating the fitted values by the industry (telework) groups:
+empl_ind_fun <- function(l){
+  temp <- df3 %>%
+    filter(TW == l)
+
+  mod_temp <- lm(empl_rate ~ MONTH, data = temp[temp$YEAR < 2020,])
+
+  temp$Predict <- c(rep(NA, 24),
+                    predict(mod_temp, newdata = temp[temp$YEAR > 2019,]))
+
+  return(temp)
+}
+
+# Obtaining the predicted values and adding them df3:
+to_merge_temp <- empl_ind_fun(levels(df3$TW)[1])
+to_merge_temp <- bind_rows(to_merge_temp, empl_ind_fun(levels(df3$TW)[2]))
+df3 <- left_join(df3, to_merge_temp)
+rm(to_merge_temp)
+
+# Plotting the true and predicted values together by TW groups, like in education:
+ggplot(df3,
+       aes(x = TIME, group = TW, col = TW)) +
+  geom_point(aes(y = empl_rate)) +
+  geom_line(aes(y = Predict), size = 1, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') +
+  scale_y_continuous(breaks = seq(0.85, 1, .0625),
+                     labels = scales::percent,
+                     limits = c(0.85, 1)) +
+  theme_bw() +
+  xlab('') +
+  ylab('') +
+  ggtitle("Distributional Effects: Employment by Industry",
+          subtitle = 'Where Industries are Divided into Two Groups \nAccording to Their Ability to Telework') +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", 
+                                  size = 14, hjust = 0),
+        plot.subtitle = element_text(color = '#488696', face = 'bold', 
+                                     size = 12, hjust = 0),
+        legend.title = element_blank(),
+        legend.position = 'right')
+```
+
+What is observeable on the plot above completely contrasts the findings and the discussion from class - something which is counter-intuitive. Before I begin analysing such result, I will repeat the steps for obtaining this figure, however, this time increasing the borderline level between teleworkers and non-teleworkers. That is, I personally suspect and believe that the different results shown in this last plot are due to my specific choice of threshold. To be precise, the chosen value of 0.3 to distinguish between teleworkers and non-teleworkers relies solely on the range of teleworking abilities presented in the table by Neimann and Dinjel (2020), hence it was relative. Therefore I will instead adopt a new, absolute, value which shows predominant ability to telework, namely a value of at least 0.5.
+
+*I also observe some discrepancies between the Standard Industrial Classifications codes, the NAICS codes, and the ones in the IPUMS data. When re-plotting the above data, I will pay double attention to the different codes and categories, so that I avoid misinterpretation of the results as much as possible.*
+
+Following this argument, I will now include five sectors from the Neimann and Dinjel (2020) table. These are the Wholesale Trade (both of Durables and Nondurables) with codes 4070-4590 in the CPS data; the Professional & Related Services with CPS codes in 7270-7490; the Finance, Insurance & Real Estate with CPS codes between 6870 and 7072, included; and lastly, the Business and Repair Services with CPS codes of 7570-7590, and of 8770-8891.
+
+
+```{r echo = F, warning = F, message = F}
+# Creating the industry data frame:
+df3 <- CPS_full_df %>%
+  select(YEAR, MONTH, EMPSTAT, IND) %>%
+  #########################################
+  filter(EMPSTAT %in% c(10, 12, 21, 22)) %>%
+  filter(IND != 0) %>%
+  # filtering out the missing values
+  group_by(YEAR, MONTH, EMPSTAT, IND) %>%
+  summarise(count = n()) %>%
+  spread(key = IND, value = count) %>%
+  ungroup()
+
+df3[is.na(df3)] <- 0
+
+  # summing up for the two industries based on telework:
+df3 <- df3 %>%
+  mutate(total = rowSums(df3[4:282], na.rm = T),
+         teleworkers = rowSums(select(df3, 
+                                      # WHOLESALE TRADE:
+                                      starts_with('40'), starts_with('41'),
+                                      starts_with('42'), starts_with('43'),
+                                      starts_with('44'), starts_with('45'),
+                                      # PROF & RELATED SERVICES:
+                                      starts_with('72'), starts_with('73'),
+                                      starts_with('74'),
+                                      # FINANCE, INSURANCE & REAL ESTATE:
+                                      starts_with('68'), starts_with('69'),
+                                      starts_with('70'),
+                                      # BUSINESS & REPAIR:
+                                      starts_with('75'), starts_with('87'),
+                                      starts_with('88')),
+                               na.rm = T) - `680` - `690` - `7080`, 
+         non_teleworkers = total - teleworkers) %>%
+  select(YEAR, MONTH, EMPSTAT, teleworkers, non_teleworkers) %>%
+  # now summarizing for employment rates:
+  gather(TW, count, 4:5) %>%
+  #########################################
+  spread(key = EMPSTAT, value = count) %>%
+  mutate(empl_pers = rowSums(cbind(`10`,`12`), na.rm = T), 
+         LF = rowSums(cbind(`10`,`12`,`21`), na.rm = T)) %>%
+  mutate(empl_rate = empl_pers/LF) %>%
+  #
+  select(YEAR, MONTH, TW, empl_rate) %>%
+  mutate(MONTH = as.factor(MONTH), 
+         TW = factor(TW,
+                       levels = c('non_teleworkers', 'teleworkers'),
+                       labels = c('Low Telework Ability, < 0.5',
+                                  'High Telework Ability')),
+         TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)), 
+                        format = '%Y-%m'))
+
+# Calculating the fitted values by the industry (telework) groups:
+empl_ind_fun <- function(l){
+  temp <- df3 %>%
+    filter(TW == l)
+
+  mod_temp <- lm(empl_rate ~ MONTH, data = temp[temp$YEAR < 2020,])
+
+  temp$Predict <- c(rep(NA, 24),
+                    predict(mod_temp, newdata = temp[temp$YEAR > 2019,]))
+
+  return(temp)
+}
+
+# Obtaining the predicted values and adding them df3:
+to_merge_temp <- empl_ind_fun(levels(df3$TW)[1])
+to_merge_temp <- bind_rows(to_merge_temp, empl_ind_fun(levels(df3$TW)[2]))
+df3 <- left_join(df3, to_merge_temp)
+rm(to_merge_temp)
+
+# Plotting the true and predicted values together by TW groups, like in education:
+ggplot(df3,
+       aes(x = TIME, group = TW, col = TW)) +
+  geom_point(aes(y = empl_rate)) +
+  geom_line(aes(y = Predict), size = 1, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') +
+  scale_y_continuous(breaks = seq(0.85, 1, .00725),
+                     labels = scales::percent,
+                     limits = c(0.85, 1)) +
+  theme_bw() +
+  xlab('') +
+  ylab('') +
+  ggtitle("Distributional Effects: Employment by Industry",
+          subtitle = 'Where Industries are Divided into Two Groups \nAccording to Their Ability to Telework') +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", 
+                                  size = 14, hjust = 0),
+        plot.subtitle = element_text(color = '#488696', face = 'bold', 
+                                     size = 12, hjust = 0),
+        legend.title = element_blank(),
+        legend.position = 'right', 
+        legend.text = element_text(size = 12))
+```
+
+In this new 'version' of the previous plot, it is tangible that results are much more in-line with the ones from class. Hence, most probably the issue with the initial plot was indeed the choice of a threshold for high/low teleworking, as well as the discrepancies between the classifications of the industries that were non-attended.
+
+As discussed and observed during our lectures, persons with high teleworking abilities were the ones to suffer less from the COVID-19 lockdown, which is intuitive. Their jobs could be at least to some extent 'saved' by working from home, and the shutdown didn't necessarily translate to temporary layoffs or getting sacked for these people. 
+
+To the contrary, the unemployment rate of people with low teleworking abilities increased by more than 7.5 p.p. from March to a level of almost 12.75% in April. To compare, the percentage points increase in the group of 'teleworking' persons is almost half of that of the 'non-teleworking' people - it is slightly more than 3.75 p.p. The latter finding also explains the difference between the fitted values in the two lines on the plot and the true realizations in 2020 so far.
+
+Another noticeable aspect of this graph is the fact that people with low-teleworking ability seem to have been recovering much quicker since the lowest values of the employment rate in April. This might be due to the fact that many 'non-teleworkers' were on a temporary layoff until the re-opening of some businesses and services following the lockdown, and that the employment levels have quickly been going up to the previous 'normal' rates once the shutdown measures were lifted. The much slower rate of recovery here for the 'teleworkers' could be further explored and analysed - e.g. to see if the general shutdown in March-April has caused more structural unemployment for one group rather than for the other. This section of the current analysis is concluded by the replica plot below which re-establishes the observations above.
+
+```{r echo = F, warning = F, message = F}
+df3 <- df3 %>%
+  mutate(diff_perc = (empl_rate - Predict)*100)
+
+pl3 <- ggplot(filter(df3, !(is.na(diff_perc))), 
+                aes(x = TIME, y = diff_perc)) +
+  geom_line(size = 2, aes(group = TW, col = TW)) +
+  geom_line(data = filter(df1, !(is.na(diff_perc))), 
+            show.legend = F, aes(y = diff_perc, x = TIME), color = 'lightgray', 
+            size = 2, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '1 month') + 
+  # scale_y_continuous(breaks = seq(-10, 1.25, 1.25)) +
+  # geom_point(aes(y = df1$Predict, col = lbl_pr)) +
+  theme_bw() +
+  xlab('') +
+  ylab('Difference in Employment Rate, %') +
+  ggtitle("Prediction-Reality Gap (by Ability to Telework)") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'bottom')
+
+pl3
+```
+
+#### By Occupation
+As required, I will split the occupations in the dataset into a few groups that I find potentially useful for the evaluation of the COVID-19 impact on Labour Force. Namely, I will consider the division into groups of STEM (i.e. Science, Technology, Engineering & Maths), STEM-related, and Non-STEM occupations, motivated by the well-put definitions/codes provided by U.S. Census Bureau.
+
+* This exact choice follows an implicit assumption that I make - I 'suspect' that persons occupied in STEM areas are more likely to have better flexible working arrangements (incl. the ability to telework) and hence are more likely to have a lower human contact score - this line of thought provides a good link to the previous part of this section and to the aspects yet un-replicated from our class notes. 
+* Furthermore, one could easily find evidence that there is an ongoing high demand for STEM and STEM-related positions - something that could be further explored to be significantly interrelated with better job security for the persons employed in such areas. 
+* To conclude the reasoning behind my choice of splitting the occupations into groups, I will re-state what we discussed in class: some of the occupations in the table for jobs by human contact score seem to be out-of-place at a first glance (the groups of Couriers & Messengers, Dietitians & Nutritionists, e.g.).
+
+As already mentioned, I will rely on the United States Census Bureau [STEM-categorization of occupations](https://www2.census.gov/programs-surveys/demo/guidance/industry-occupation/2018-census-stem-related-and-non-stem-occupation-code-list.xlsx). That being said, I will also make use of their [xlsx file](https://www2.census.gov/programs-surveys/demo/guidance/industry-occupation/2017-industry-code-list-with-crosswalk.xlsx) which provides the link between the official occupation codes following the last couple of changes. *I will make some simple changes to these two files via VBA in order to make them easier to use in R - these edited versions will be available in the folder of my submission.*
+
+Since all the medical workers have been in the front line of battling the COVID-19 crisis, and have therefore been exposed to even more human contacts than usual, I will consider them to be a separate (sub-)group from the STEM-related individuals in the data.
+
+```{r echo = F, warning = F, message = F}
+# First, obtaining the new codes of OCC for all observations:
+codes_links <- read.csv('CODES_CHANGES.csv') %>%
+  select(-3)
+colnames(codes_links) <- c('OCC', 'OCC_new')
+
+df4 <- CPS_full_df %>%
+  select(YEAR, MONTH, EMPSTAT, OCC) %>%
+  #########################################
+  filter(EMPSTAT %in% c(10, 12, 21, 22)) %>%
+  filter(OCC != 0) 
+
+df4_up_to_2019 <- df4 %>% 
+  filter(YEAR < 2020) %>%
+  left_join(codes_links, by = 'OCC')
+
+df4_up_to_2019_nas <- df4_up_to_2019 %>%
+  filter(is.na(OCC_new)) %>%
+  mutate(OCC_new = OCC)
+
+df4_up_to_2019_not_nas <- df4_up_to_2019 %>%
+  filter(!(is.na(OCC_new)))
+
+df4_2020 <- df4 %>%
+  filter(YEAR > 2019) %>%
+  mutate(OCC_new = OCC)
+
+df4 <- df4_up_to_2019_nas %>%
+  bind_rows(df4_up_to_2019_not_nas) %>%
+  bind_rows(df4_2020)
+
+rm(df4_2020, df4_up_to_2019, df4_up_to_2019_nas, df4_up_to_2019_not_nas)
+
+df4 <- select(df4,-OCC)
+
+# Merging the STEM categorizations:
+STEM <- read.csv('STEM.csv')
+colnames(STEM)[1] <- 'OCC_new'
+
+df4 <- left_join(df4, STEM) %>%
+  filter(!(is.na(STEM)))
+  # Removing the observations for which we lack data on this categorization.
+
+# Proceeding with the plotting/analysis as before:
+df4 <- df4 %>%
+  select(YEAR, MONTH, EMPSTAT, STEM) %>%
+  group_by(YEAR, MONTH, EMPSTAT, STEM) %>%
+  summarise(count = n()) %>%
+  spread(key = EMPSTAT, value = count) %>%
+  mutate(empl_pers = rowSums(cbind(`10`,`12`), na.rm = T), 
+         LF = rowSums(cbind(`10`,`12`,`21`), na.rm = T)) %>%
+  mutate(empl_rate = empl_pers/LF) %>%
+  select(YEAR, MONTH, STEM, empl_rate) %>%
+  ungroup() %>%
+  mutate(MONTH = as.factor(MONTH), 
+         STEM = factor(STEM,
+                       levels = c('STEM', 'STEM_related', 
+                                  'STEM_related_in_healthcare',
+                                  'Non_STEM'),
+                       labels = c('STEM', 'STEM-related (not in Healthcare)',
+                                  'STEM-related in Healthcare', 
+                                  'Not STEM')),
+         TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)), 
+                        format = '%Y-%m'))
+
+# Calculating the fitted values by groups:
+empl_occ_fun <- function(l){
+  temp <- df4 %>%
+    filter(STEM == l)
+
+  mod_temp <- lm(empl_rate ~ MONTH, data = temp[temp$YEAR < 2020,])
+  
+  temp$Predict <- c(rep(NA, 24),
+                    predict(mod_temp, newdata = temp[temp$YEAR > 2019,]))
+  
+  return(temp)
+}
+
+to_merge_temp <- empl_occ_fun(levels(df4$STEM)[1])
+
+for(i in levels(df4$STEM)[2:length(levels(df4$STEM))]){
+  to_merge_temp <- bind_rows(to_merge_temp, empl_occ_fun(i))
+}
+
+# Adding the fitted values to the original df:
+df4 <- left_join(df4, to_merge_temp)
+rm(to_merge_temp)
+
+ggplot(df4,
+       aes(x = TIME, group = STEM, col = STEM)) +
+  geom_point(aes(y = empl_rate)) +
+  geom_line(aes(y = Predict), size = 1, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') + 
+  # scale_y_continuous(breaks = seq(0.7, 1, .025),
+  #                    labels = scales::percent,
+  #                    limits = c(0.7, 1)) +
+  theme_bw() +
+  xlab('') +
+  ylab('') +
+  ggtitle("Distributional Effects: Employment by Occupation Group", 
+          subtitle = 'Considering Four Main Groups Based on STEM Categorization') +
+  theme_bw() + 
+  guides(col = guide_legend(ncol = 2, nrow = 2)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        plot.subtitle = element_text(color = '#488696', face = 'bold', 
+                                     size = 12, hjust = 0),
+        legend.title = element_blank(),
+        legend.position = 'bottom',
+        legend.justification = 'right',
+        legend.background = element_rect(fill = '#425359', size = 3),
+        legend.text = element_text(size = 15, color = 'white'))
+```
+
+It is evident from the plot that the most affected persons by occupation were the employees of non-STEM jobs. If we argue that STEM and STEM-related positions (apart from in healthcare) are more likely to provide flexible working arrangements s.a. teleworking opportunities, this finding could be in line with the previous results for the teleworking abilities' importance.
+
+```{r echo = F, warning = F, message = F}
+df4 <- df4 %>%
+  mutate(diff_perc = (empl_rate - Predict)*100)
+
+ggplot(filter(df4, !(is.na(diff_perc))), 
+                aes(x = TIME, y = diff_perc)) +
+  geom_line(size = 2, aes(group = STEM, col = STEM)) +
+  geom_line(data = filter(df1, !(is.na(diff_perc))), 
+            show.legend = F, aes(y = diff_perc, x = TIME), color = 'lightgray', 
+            size = 2, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '1 month') + 
+  scale_y_continuous(breaks = seq(-12, 2, 1)) +
+  theme_bw() +
+  guides(col = guide_legend(ncol = 2, nrow = 2)) +
+  xlab('') +
+  ylab('Difference in Employment Rate, %') +
+  ggtitle("Prediction-Reality Gap (by Occupation)") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'bottom',
+        legend.justification = 'right',
+        legend.background = element_rect(fill = '#425359', size = 3),
+        legend.text = element_text(size = 15, color = 'white'))
+```
+
+The plot above shows us that in fact non-STEM occupations suffered the most in terms of unemployment during this year, since the first lockdowns were imposed. This, as already mentioned, might be due to the fact that there is a high demand for STEM-related jobs and that these positions require high qualifications/educational levels attained - i.e. these jobs could be considered more 'stable'. Again, there is also the role of flexible working arrangements that needs to be further analysed - STEM-related positions (apart from in healthcare) appear to be more open for teleworking than other. For future reasearch on this topic, the distinction between STEM-related people in healthcare and outside healthcare should be taken into account (see the plot above).
+
+### Average Weekly Hours {.tabset}
+The Average Weekly Hours (AWH) variable for a given period is calculated by taking the respective mean value for all individuals in the data set relevant for that time. The CPS contains information on the total weekly hours worked by individuals interviewed - namely that is the *UHRSWORKT* variable.
+
+*Following the insights from our class notes, I will remove all observations with more than 112 hours worked per week before calculating the averages.*
+
+#### Fitted vs. COVID-19 Values
+Once again, one could observe a strong monthly seasonality in the data. Therefore, I will maintain the same detrending technique as before - i.e. I will de-seasonalize by using dummy variables for the months. This regression gives us the blue points on the plot below - these are the fitted values. The red dots represent the true realizations of the average weekly hours variable.
+
+```{r echo = F, warning = F, message = F}
+# The data frame used for the replication of the first set of plots: 
+df5 <- CPS_full_df %>%
+  select(YEAR, MONTH, UHRSWORKT) %>%
+  filter(UHRSWORKT <= 112, UHRSWORKT != 0) %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(avg = mean(UHRSWORKT, na.rm = T)) %>%
+  ungroup() %>%
+  mutate(MONTH = str_pad(as.character(MONTH), 2, pad = '0')) %>%
+  mutate(TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)),
+                        format = '%Y-%m')) %>%
+  mutate(MONTH = as.factor(MONTH))
+
+mod2 <- lm(avg ~ MONTH, data = df5[df5$YEAR < 2020,])
+
+df5$Predict <- c(rep(NA, 24),
+                 predict(mod2, newdata = df5[df5$YEAR > 2019,]))
+df5$lbl <- c(rep('pre-COVID', 24),
+               rep('COVID', 8))
+df5$lbl_pr <- c(rep(NA, 24),
+                rep('Predictions', 8))
+
+pl5_1 <- ggplot(df5, aes(x = TIME, col = lbl)) +
+  geom_point(aes(y = avg)) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') + 
+  # scale_y_continuous(breaks = seq(0.85, 0.975, .0125),
+  #                    labels = scales::percent,
+  #                    limits = c(0.85, 0.975)) +
+  geom_point(aes(y = df5$Predict, col = lbl_pr)) +
+  theme_bw() +
+  xlab('') +
+  ylab('Average Weekly Hours') +
+  ggtitle("") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'bottom',
+        legend.justification = 'right',
+        legend.background = element_rect(fill = '#425359', size = 3),
+        legend.text = element_text(size = 15, color = 'white'))
+  
+df5 <- df5 %>%
+  mutate(diff_mean = avg - Predict)
+
+pl5_2 <- ggplot(filter(df5, !(is.na(diff_mean))), 
+                aes(x = TIME, y = diff_mean)) +
+  geom_line(col = 'aquamarine4', size = 2) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '1 month') + 
+  # scale_y_continuous(breaks = seq(-10, 1.25, 1.25)) +
+  # geom_point(aes(y = df1$Predict, col = lbl_pr)) +
+  theme_bw() +
+  xlab('') +
+  ylab('Difference in the Means') +
+  ggtitle("Prediction-Reality Gap") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'none')
+
+pl5_1
+```
+
+Here, we can see a different 'behaviour' than in the employment rate data. In March, following the WHO announcement of a pandemic, the AWH took a downfall - this is most likely an immediate consequence of the numerous shutdowns and lockdowns in the country. In April, however, when the unemployment level was at its highest for the year, average weekly hours increased significantly and remained higher than the predicted values until May. The reason behind this might be because of the drastic measures taken by some firm s.a. deciding to sack a huge number of employees. Consequently, in the short term the firm's operations had to be executed by a lower than usual number of people, i.e. businesses were understaffed, and employees there had to work more than before to compensate the absence of their colleagues. Another potential factor for this variable's behaviour at that times could be the time required to adopt to the new working environment - many people were then forced to work from home for the first time, and businesses had to pay the cost of the steep learning curve to telework.
+
+Furthermore, as discussed in the lectures, this number is to some extent subjective as it is measured by the workers themselves - the lack of multiple coffee breaks with colleagues a day; the absence of commuting hours for which they are usually paid, could have made workers feel more busy than before. Another argument supporting this hypothesis is that teleworking hinders to some extent the ability to work in a team, and some tasks take much more time because employees have to handle them on their own.
+
+```{r, echo = F, warning = F, message = F}
+pl5_2
+```
+
+We see that following this 'learning'/'adaptation' period in March-April, the average working hours fell below the expected values, despite maintaining the correct 'seasonal direction'. These values could indeed serve as some further reasoning to assume that the process of adjusting to the new work environment was the main driver behind the larger values in the first couple of months during lockdown.
+
+#### By Education
+Here, I will again rely on the *EDUC* variable to explore the distributional effects on the weekly hours' mean by education.
+
+```{r echo = F, warning = F, message = F}
+df6 <- CPS_full_df %>%
+  select(YEAR, MONTH, UHRSWORKT, EDUC) %>%
+  filter(EDUC != 1) %>%
+  filter(UHRSWORKT <= 112, UHRSWORKT != 0) %>%
+  group_by(YEAR, MONTH, EDUC) %>%
+  summarise(avg = mean(UHRSWORKT, na.rm = T),
+            count = n()) %>%
+  ungroup() %>%
+  mutate(MONTH = str_pad(as.character(MONTH), 2, pad = '0'))
+
+# this gives the mean for the persons with less than a high school degree:
+df6_lessHS <- df6 %>%
+  filter(EDUC %in% c(2,10,20,30,40,50,60,71)) %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(EDUC = 'less_HS')
+
+df6_HS <- df6 %>%
+  filter(EDUC %in% c(73, 81, 124)) %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count))  %>%
+  ungroup() %>%
+  mutate(EDUC = 'HS')
+
+df6_college <- df6 %>%
+  filter(EDUC %in% c(91, 92, 111)) %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count))  %>%
+  ungroup() %>%
+  mutate(EDUC = 'college')
+
+df6_college_plus <- df6 %>%
+  filter(EDUC %in% c(123, 125)) %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(EDUC = 'college_plus')
+
+df6 <- bind_rows(df6_lessHS, df6_HS) %>%
+  bind_rows(df6_college) %>%
+  bind_rows(df6_college_plus) %>%
+  mutate(TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)),
+                         format = '%Y-%m'),
+         EDUC = factor(EDUC,
+                       levels = c('less_HS',
+                                  'HS',
+                                  'college',
+                                  'college_plus'),
+                       labels = c('< High School',
+                                  'High School',
+                                  'College',
+                                  '> College')))
+
+rm(df6_college, df6_college_plus, df6_HS, df6_lessHS)
+
+# Calculating the fitted values by groups:
+awh_educ_fun <- function(l){
+  temp <- df6 %>%
+    filter(EDUC == l)
+  
+  mod_temp <- lm(awh ~ MONTH, data = temp[temp$YEAR < 2020,])
+  
+  temp$Predict <- c(rep(NA, 24),
+                    predict(mod_temp, newdata = temp[temp$YEAR > 2019,]))
+
+  return(temp)
+}
+
+to_merge_temp <- awh_educ_fun(levels(df6$EDUC)[1])
+
+for(i in levels(df6$EDUC)[2:length(levels(df6$EDUC))]){
+  to_merge_temp <- bind_rows(to_merge_temp, awh_educ_fun(i))
+}
+
+# Adding the fitted values to the original df:
+df6 <- left_join(df6, to_merge_temp)
+rm(to_merge_temp)
+
+ggplot(df6,
+       aes(x = TIME, group = EDUC, col = EDUC)) +
+  geom_point(aes(y = awh)) +
+  geom_line(aes(y = Predict), size = 1, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') +
+  # scale_y_continuous(breaks = seq(0.7, 1, .025),
+  #                    labels = scales::percent,
+  #                    limits = c(0.7, 1)) +
+  theme_bw() +
+  xlab('') +
+  ylab('') +
+  ggtitle("Distributional Effects: Average Weekly Hours by Education Group") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'right')
+```
+
+In the plot above, the average weekly hours have been calculated for each educational group over time. It is evident that the mean of the usual hours worked per week goes up as the educational degree increases - people with less than a high school degree have been working much less than the other educational groups. We also note that it was people with less than or with just a high shool degree were the ones to work more than the expected levels in the months of March and April. This means that the less-educated people were the ones driving the increase in the average weekly hours - probably this was because many people lost their jobs at industries which require no or few qualifications, and consequently, the remaining employees had to work more on average than before in order to complete the same amount of tasks. *One could consider the tasks to be more or less the same, since it takes time for businesses to shrink, and many of the jobs to be done were probably undertaken before the COVID-19 crisis hit the economy. That is, in the short term, we would most naturally expect to observe effects of people getting sacked only.* However, this is just a hypothesis which needs to be tested.
+
+```{r echo = F, warning = F, message = F}
+df6 <- df6 %>%
+  mutate(diff_mean = awh - Predict)
+
+ggplot(filter(df6, !(is.na(diff_mean))), 
+                aes(x = TIME, y = diff_mean, group = EDUC, col = EDUC)) +
+  geom_line(size = 2) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '1 month') + 
+  # scale_y_continuous(breaks = seq(-10, 1.25, 1.25)) +
+  # geom_point(aes(y = df1$Predict, col = lbl_pr)) +
+  theme_bw() +
+  xlab('') +
+  ylab('Difference in Average Working Hours, hs') +
+  ggtitle("Prediction-Reality Gap") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'right')
+```
+
+Once we consider the difference between what is 'usual' in terms of the predicted values, and the true realizations of the average working hours by education groups, we observe that the most volatility is present in the group of persons with less than a high school diploma. It is also the group to suffer the most from the COVID-19 in the long-term - the remaning three educational groups have more or less recovered to their usual states.
+
+It would be interesting to explore further the group of college graduates, as well - persons in this category are experiencing a downwards sloping trend in their average working hours. This might, of course, be due to the periodicity of our data - as we already discussed, there is a monthly seasonality present. However, there might be something additional triggering this process as the difference to the fitted points increases in magnitude.
+
+#### By Industry
+Once again, I will rely on two main groups of industries to divide the data at hand - namely the separation will be made on the basis of the average ability to telework among individuals in the industry. I will refrain from splitting the industries myself, as the data available does not seem to provide enough information on this topic. Instead, I will, just like before make use of the table from our class' Lecture Notes.
+
+When analysing the employment rate, initially, I made the mistake to mismatch some of the codes for industries across data, and I also chose the value of 0.3 for a threshold on the ability to telework for my first try. Here, I will not repeat this thought process and will go straight to using the correct coding for the *IND* variable, as well as a borderline of 0.5 to distinguish 'teleworkers' from 'non-teleworkers'.
+
+Following this argument, there are again five sectors from the Neimann and Dinjel (2020) table. These are the Wholesale Trade (both of Durables and Nondurables) with codes 4070-4590 in the CPS data; the Professional & Related Services with CPS codes in 7270-7490; the Finance, Insurance & Real Estate with CPS codes between 6870 and 7072, included; and lastly, the Business and Repair Services with CPS codes of 7570-7590, and of 8770-8891.
+
+```{r echo = F, warning = F, message = F}
+# Creating the industry data frame:
+df7 <- CPS_full_df %>%
+  select(YEAR, MONTH, UHRSWORKT, IND) %>%
+  filter(IND != 0) %>%
+  filter(UHRSWORKT <= 112, UHRSWORKT != 0) %>%
+  group_by(YEAR, MONTH, IND) %>%
+  summarise(avg = mean(UHRSWORKT, na.rm = T),
+            count = n()) %>%
+  ungroup() %>%
+  mutate(MONTH = str_pad(as.character(MONTH), 2, pad = '0'),
+         IND = as.character(IND))
+
+# this gives the mean for the teleworkers:
+df7_TW <- df7 %>%
+  filter(str_detect(IND, '^40|^41|^42|^43|^44|^45|^72|^73|^74|^68|^69|^70|^75|^87|^88'),
+         !(IND %in% c('680', '690', '7080'))) %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(TW = 'TW')
+
+df7_NONTW <- df7 %>%
+  filter(!str_detect(IND, 
+                     '^40|^41|^42|^43|^44|^45|^72|^73|^74|^68|^69|^70|^75|^87|^88') | IND %in% c('680', '690', '7080')) %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(TW = 'non-TW')
+
+df7 <- bind_rows(df7_TW, df7_NONTW) %>%
+  mutate(TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)),
+                         format = '%Y-%m'),
+         TW = factor(TW,
+                       levels = c('non-TW','TW'),
+                       labels = c('Low Telework Ability, < 0.5',
+                                  'High Telework Ability')))
+
+rm(df7_TW, df7_NONTW)
+
+# Calculating the fitted values by groups:
+awh_ind_fun <- function(l){
+  temp <- df7 %>%
+    filter(TW == l)
+  
+  mod_temp <- lm(awh ~ MONTH, data = temp[temp$YEAR < 2020,])
+  
+  temp$Predict <- c(rep(NA, 24),
+                    predict(mod_temp, newdata = temp[temp$YEAR > 2019,]))
+
+  return(temp)
+}
+
+to_merge_temp <- awh_ind_fun(levels(df7$TW)[1]) %>%
+  bind_rows(awh_ind_fun(levels(df7$TW)[2]))
+
+# Adding the fitted values to the original df:
+df7 <- left_join(df7, to_merge_temp)
+rm(to_merge_temp)
+
+# Plotting the true and predicted values together by TW groups, like in education:
+ggplot(df7,
+       aes(x = TIME, group = TW, col = TW)) +
+  geom_point(aes(y = awh)) +
+  geom_line(aes(y = Predict), size = 1, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') +
+  # scale_y_continuous(breaks = seq(0.85, 1, .00725),
+  #                    labels = scales::percent,
+  #                    limits = c(0.85, 1)) +
+  theme_bw() +
+  xlab('') +
+  ylab('') +
+  ggtitle("Distributional Effects: Average Weekly Hours by Industry",
+          subtitle = 'Where Industries are Divided into Two Groups \nAccording to Their Ability to Telework') +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold",
+                                  size = 14, hjust = 0),
+        plot.subtitle = element_text(color = '#488696', face = 'bold',
+                                     size = 12, hjust = 0),
+        legend.title = element_blank(),
+        legend.position = 'right',
+        legend.text = element_text(size = 12))
+```
+
+It is evident from this plot that when looking into the average weekly hours variable by ability to telework, the people with low ability to telework have maintained the same 'trend' and means as before - with the only exception of the months of March and April. This is in line with the previous discussion, and shows that it was the working hours of the people with high teleworking ability that changed during the COVID-19. This is also depicted on the plot to follow.
+
+```{r echo = F, warning = F, message = F}
+df7 <- df7 %>%
+  mutate(diff_mean = awh - Predict)
+
+ggplot(filter(df7, !(is.na(diff_mean))), 
+                aes(x = TIME, y = diff_mean)) +
+  geom_line(size = 2, aes(group = TW, col = TW)) +
+  geom_line(data = filter(df5, !(is.na(diff_mean))), 
+            show.legend = F, aes(y = diff_mean, x = TIME), color = 'lightgray', 
+            size = 2, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '1 month') + 
+  # scale_y_continuous(breaks = seq(-10, 1.25, 1.25)) +
+  # geom_point(aes(y = df1$Predict, col = lbl_pr)) +
+  theme_bw() +
+  xlab('') +
+  ylab('Difference in Mean') +
+  ggtitle("Prediction-Reality Gap (by Ability to Telework)") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        legend.title = element_blank(),
+        legend.position = 'bottom')
+```
+
+**It is also important to bear in mind that the ability to telework is a random variable itself - i.e. it changes over time, and the occurrence of COVID-19 showed this to a great extent. Therefore, such an analysis might not be very wise as it considers a deterministic teleworking ability for each of the industries for the whole period of interest - something that is clearly not applicable to this past half a year.**
+
+*Note to self: look into the methodology of the paper which gives this teleworking ability table.*
+
+#### By Occupation
+Once again, I will split the occupations in the data set into a few groups of occupations based on their relation to STEM. To this end, I will exploit the U.S. Census Bureau data which I have already used in the analysis of the employment rate.
+
+```{r echo = F, warning = F, message = F}
+# First, obtaining the new codes of OCC for all observations:
+codes_links <- read.csv('CODES_CHANGES.csv') %>%
+  select(-3)
+colnames(codes_links) <- c('OCC', 'OCC_new')
+
+df8 <- CPS_full_df %>%
+  select(YEAR, MONTH, UHRSWORKT, OCC) %>%
+  filter(UHRSWORKT != 0, OCC != 0) %>%
+  filter(UHRSWORKT <= 112)
+
+df8_up_to_2019 <- df8 %>% 
+  filter(YEAR < 2020) %>%
+  left_join(codes_links, by = 'OCC')
+
+df8_up_to_2019_nas <- df8_up_to_2019 %>%
+  filter(is.na(OCC_new)) %>%
+  mutate(OCC_new = OCC)
+
+df8_up_to_2019_not_nas <- df8_up_to_2019 %>%
+  filter(!(is.na(OCC_new)))
+
+df8_2020 <- df8 %>%
+  filter(YEAR > 2019) %>%
+  mutate(OCC_new = OCC)
+
+df8 <- df8_up_to_2019_nas %>%
+  bind_rows(df8_up_to_2019_not_nas) %>%
+  bind_rows(df8_2020)
+
+rm(df8_2020, df8_up_to_2019, df8_up_to_2019_nas, df8_up_to_2019_not_nas)
+
+df8 <- select(df8,-OCC)
+
+# Merging the STEM categorizations:
+STEM <- read.csv('STEM.csv')
+colnames(STEM)[1] <- 'OCC_new'
+
+df8 <- left_join(df8, STEM) %>%
+  filter(!(is.na(STEM)))
+# Removing the observations for which we lack data on this categorization.
+
+df8 <- df8 %>%
+  group_by(YEAR, MONTH, STEM) %>%
+  summarise(avg = mean(UHRSWORKT, na.rm = T),
+            count = n()) %>%
+  ungroup() %>%  
+  mutate(MONTH = str_pad(as.character(MONTH), 2, pad = '0'),
+         STEM = as.character(STEM))
+
+df8_non_STEM <- df8 %>%
+  filter(STEM == 'Non_STEM') %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(STEM = 'Non_STEM')
+
+df8_STEM <- df8 %>%
+  filter(STEM == 'STEM') %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(STEM = 'STEM')
+
+df8_STEM_rel_n_hc <- df8 %>%
+  filter(STEM == 'STEM_related') %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(STEM = 'STEM_related')
+
+df8_STEM_rel_hc <- df8 %>%
+  filter(STEM == 'STEM_related_in_healthcare') %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(STEM = 'STEM_related_in_healthcare')
+
+df8 <- bind_rows(df8_non_STEM, df8_STEM) %>%
+  bind_rows(df8_STEM_rel_n_hc) %>%
+  bind_rows(df8_STEM_rel_hc) %>%
+  mutate(TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)),
+                         format = '%Y-%m'),
+         STEM = factor(STEM,
+                       levels = c('STEM','STEM_related',
+                                  'STEM_related_in_healthcare','Non_STEM'),
+                       labels = c('STEM','STEM-related (not in Healthcare)',
+                                  'STEM-related in Healthcare','Not STEM')))
+
+rm(df8_STEM, df8_STEM_rel_hc, df8_STEM_rel_n_hc, df8_non_STEM)
+
+# Calculating the fitted values by groups:
+awh_occ_fun <- function(l){
+  temp <- df8 %>%
+    filter(STEM == l)
+  
+  mod_temp <- lm(awh ~ MONTH, data = temp[temp$YEAR < 2020,])
+  
+  temp$Predict <- c(rep(NA, 24),
+                    predict(mod_temp, newdata = temp[temp$YEAR > 2019,]))
+
+  return(temp)
+}
+
+to_merge_temp <- awh_occ_fun(levels(df8$STEM)[1]) %>%
+  bind_rows(awh_occ_fun(levels(df8$STEM)[2])) %>%
+  bind_rows(awh_occ_fun(levels(df8$STEM)[3])) %>%
+  bind_rows(awh_occ_fun(levels(df8$STEM)[4]))
+
+# Adding the fitted values to the original df:
+df8 <- left_join(df8, to_merge_temp)
+rm(to_merge_temp)
+
+# Plotting the true and predicted values together by TW groups, like in education:
+ggplot(df8,
+       aes(x = TIME, group = STEM, col = STEM)) +
+  geom_point(aes(y = awh)) +
+  geom_line(aes(y = Predict), size = 1, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') +
+  # scale_y_continuous(breaks = seq(0.85, 1, .00725),
+  #                    labels = scales::percent,
+  #                    limits = c(0.85, 1)) +
+  theme_bw() +
+  xlab('') +
+  ylab('') +
+  ggtitle("Distributional Effects: Average Weekly Hours (<112) by Occupation Group", 
+          subtitle = 'Considering Four Main Groups Based on STEM Categorization') +
+  theme_bw() + 
+  guides(col = guide_legend(ncol = 2, nrow = 2)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        plot.subtitle = element_text(color = '#488696', face = 'bold', 
+                                     size = 12, hjust = 0),
+        legend.title = element_blank(),
+        legend.position = 'bottom',
+        legend.justification = 'right',
+        legend.background = element_rect(fill = '#425359', size = 3),
+        legend.text = element_text(size = 15, color = 'white'))
+```
+
+Once again, it is the people who have occupations outside the STEM area who have the least average weekly hours for all the periods of interest. They are also the ones to remain closest to their usual monthly values during the COVID-19 outbreak, apart from the months of March and April. An interesting aspect shown by this plot is that persons wokring in STEM-related jobs outside Healthcare worked the most and had an average of their working hours much higher than expected during 2020. Probably, this could be caused by their importance and participation in making the change towards teleworking and more flexible arrangements. That is, the higher than usual values might be due to the fact that this group of people is most likely to bear the cost of the 'learning curve' for the 'new normal' - e.g. software engineers, technical support, programmers, managers, etc.
+
+This plot also provides a valuable insight into the work of medics during the COVID-19 crisis. At a first glance, once would say that it was the STEM-related occupations in Healthcare that showed the greatest negative difference between realizations of the average working hours and fitted values. However, it is crucial to notice that here, we are adjusting to exclude all the individuals who work for more than 112 hours. I will re-create this plot below in order to show the imporantance of this fact.
+
+
+```{r echo = F, warning = F, message = F}
+df8 <- CPS_full_df %>%
+  select(YEAR, MONTH, UHRSWORKT, OCC) %>%
+  filter(UHRSWORKT != 0, OCC != 0)
+
+df8_up_to_2019 <- df8 %>% 
+  filter(YEAR < 2020) %>%
+  left_join(codes_links, by = 'OCC')
+
+df8_up_to_2019_nas <- df8_up_to_2019 %>%
+  filter(is.na(OCC_new)) %>%
+  mutate(OCC_new = OCC)
+
+df8_up_to_2019_not_nas <- df8_up_to_2019 %>%
+  filter(!(is.na(OCC_new)))
+
+df8_2020 <- df8 %>%
+  filter(YEAR > 2019) %>%
+  mutate(OCC_new = OCC)
+
+df8 <- df8_up_to_2019_nas %>%
+  bind_rows(df8_up_to_2019_not_nas) %>%
+  bind_rows(df8_2020)
+
+rm(df8_2020, df8_up_to_2019, df8_up_to_2019_nas, df8_up_to_2019_not_nas)
+
+df8 <- select(df8,-OCC)
+
+# Merging the STEM categorizations:
+STEM <- read.csv('STEM.csv')
+colnames(STEM)[1] <- 'OCC_new'
+
+df8 <- left_join(df8, STEM) %>%
+  filter(!(is.na(STEM)))
+# Removing the observations for which we lack data on this categorization.
+
+df8 <- df8 %>%
+  group_by(YEAR, MONTH, STEM) %>%
+  summarise(avg = mean(UHRSWORKT, na.rm = T),
+            count = n()) %>%
+  ungroup() %>%  
+  mutate(MONTH = str_pad(as.character(MONTH), 2, pad = '0'),
+         STEM = as.character(STEM))
+
+df8_non_STEM <- df8 %>%
+  filter(STEM == 'Non_STEM') %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(STEM = 'Non_STEM')
+
+df8_STEM <- df8 %>%
+  filter(STEM == 'STEM') %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(STEM = 'STEM')
+
+df8_STEM_rel_n_hc <- df8 %>%
+  filter(STEM == 'STEM_related') %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(STEM = 'STEM_related')
+
+df8_STEM_rel_hc <- df8 %>%
+  filter(STEM == 'STEM_related_in_healthcare') %>%
+  group_by(YEAR, MONTH) %>%
+  summarise(awh = avg %*% count / sum(count)) %>%
+  ungroup() %>%
+  mutate(STEM = 'STEM_related_in_healthcare')
+
+df8 <- bind_rows(df8_non_STEM, df8_STEM) %>%
+  bind_rows(df8_STEM_rel_n_hc) %>%
+  bind_rows(df8_STEM_rel_hc) %>%
+  mutate(TIME = as.Date(as.yearmon(paste0(as.character(YEAR), '-', MONTH)),
+                         format = '%Y-%m'),
+         STEM = factor(STEM,
+                       levels = c('STEM','STEM_related',
+                                  'STEM_related_in_healthcare','Non_STEM'),
+                       labels = c('STEM','STEM-related (not in Healthcare)',
+                                  'STEM-related in Healthcare','Not STEM')))
+
+rm(df8_STEM, df8_STEM_rel_hc, df8_STEM_rel_n_hc, df8_non_STEM)
+
+# Calculating the fitted values by groups:
+awh_occ_fun <- function(l){
+  temp <- df8 %>%
+    filter(STEM == l)
+  
+  mod_temp <- lm(awh ~ MONTH, data = temp[temp$YEAR < 2020,])
+  
+  temp$Predict <- c(rep(NA, 24),
+                    predict(mod_temp, newdata = temp[temp$YEAR > 2019,]))
+
+  return(temp)
+}
+
+to_merge_temp <- awh_occ_fun(levels(df8$STEM)[1]) %>%
+  bind_rows(awh_occ_fun(levels(df8$STEM)[2])) %>%
+  bind_rows(awh_occ_fun(levels(df8$STEM)[3])) %>%
+  bind_rows(awh_occ_fun(levels(df8$STEM)[4]))
+
+# Adding the fitted values to the original df:
+df8 <- left_join(df8, to_merge_temp)
+rm(to_merge_temp)
+
+# Plotting the true and predicted values together by TW groups, like in education:
+ggplot(df8,
+       aes(x = TIME, group = STEM, col = STEM)) +
+  geom_point(aes(y = awh)) +
+  geom_line(aes(y = Predict), size = 1, alpha = 0.7) +
+  scale_x_date(date_labels = '%b, %Y', breaks = '2 months') +
+  # scale_y_continuous(breaks = seq(0.85, 1, .00725),
+  #                    labels = scales::percent,
+  #                    limits = c(0.85, 1)) +
+  theme_bw() +
+  xlab('') +
+  ylab('') +
+  ggtitle("Distributional Effects: Employment by Occupation Group", 
+          subtitle = 'Considering Four Main Groups Based on STEM Categorization') +
+  theme_bw() + 
+  guides(col = guide_legend(ncol = 2, nrow = 2)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.ticks = element_blank(),
+        panel.border = element_blank(),
+        plot.title = element_text(color="aquamarine4", face="bold", size=14, hjust=0),
+        plot.subtitle = element_text(color = '#488696', face = 'bold', 
+                                     size = 12, hjust = 0),
+        legend.title = element_blank(),
+        legend.position = 'bottom',
+        legend.justification = 'right',
+        legend.background = element_rect(fill = '#425359', size = 3),
+        legend.text = element_text(size = 15, color = 'white'))
+```
+
+The plot above illustrates the fallacy of using the filtering of less than 113 hours worked per week on the data in this case. The previous version, where this subsetting was done, suggested that persons occupied in healthcare worked less than 'usual' during the COVID-19 outbreak. That is because only few people worked less than 112 hours per week at those times.
+
+**Once we allow for all observations, including these with more than 112 working hours per week, we see the tremendous (and crucial) sacrifice of the people in working the front line. People outside STEM occupations worked twice than usual during the peak of epidemics, just like persons working in Healthcare. For the rest of the people, weekly working hours remained the same on average!**
+
+### Aggregate Weekly Hours
+Based on our findings in the previous sections, some conclusions about the behaviour of the Aggregate Weekly Hours variable can be made. Recall that:
+\[
+  \text{Aggregate_Weekly_Hours}_t = \text{Number_of_Employed_Persons}_t \cdot \text{Average_Weekly_Hours_per_Person}_t \, .
+\]
+For convenience, I present again two relevant plots from the previous parts of this analysis. We see that it is the drop in the employment rate is what drives the aggregate hours' chagnge.
+
+```{r, warning = T, message = T, fig.show = "hold", out.width = "50%", echo = F}
+pl1_2
+pl5_2
+```
+
+What we can see from these plots and from looking at the data is that the changes to Aggregate Weekly Hours would be mostly driven by behaviour of the Employment Rate at the period of interest, rather than by the Average Weekly Hours we observed. This re-establishes the bigger impact of COVID-19 on employment, than on average working hours, as already discussed in the previous sections.
+
+
+## Bulgaria {.tabset}
+I have made an official request to the National Statistical Institute (NSI) in Bulgaria to use some individual data from the Labour Force Survey, however, I am still waiting for their response.
+
+There are many difficulties with obtaining similar data (to the one used above for the USA) in the case of Bulgaria - most time series are not publicly available (e.g. the joint distribution of industries and employment status), or in the cases where they are present, data is only quarterly. The National Employment Agency of the country provides some monthly estimates on the levels of unemployment - however these are slightly unreliable for two main reasons:
+
+1. the unemployment rates are based solely on the persons who are currently officially registered at the National Employment Agency, and the procedure of registration is not always undertaken when a person is unemployed;
+2. the labour force denominator used to calculate the unemployment rate is not adjusted every month and does not always 'coincide' with NSI/Eurostat values - it is usually bigger than the true values; however the unemployment rate given by the National Employment Agency takes smaller than the real values in many of the cases.
+
+*I expect an official reply from the NSI (Bulgaria) by Tuesday, and the moment I receive an official approval, I will re-create some/all of the plots for the US. I will make sure to notify you when I add these extensions to my GitHub folder.*
