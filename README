@@ -11,10 +11,10 @@ Dear Albert,
 
 I hope this message finds you well!
 
-Please, kindly find here the contents of my submission folder:
+Please, kindly find here the contents of my submission folder for HW 1:
 
-- HW_1_IVANA_GANEVA.html   -> Main report with all relevant plots and comments for the tasks given
-- HW_1_IVANA_GANEVA.Rmd    -> R markdown used to create the final HTML report; contains all the R codes required for the analysis and plotting
+- IVANA_GANEVA.html   -> Main report with all relevant plots and comments for the tasks given
+- IVANA_GANEVA.Rmd    -> R markdown used to create the final HTML report; contains all the R codes required for the analysis and plotting
 - CODES_CHANGES.csv        -> An additional file used to link the occupations' codes correctly
 - STEM.csv                 -> An additional file used to establish the STEM-grouping of occupations based on the U.S. Census Bureau categorization
 
