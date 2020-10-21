@@ -1,1 +1,27 @@
-Homework 1
+# QM_HW_1
+## Quantitative Macroeconomics - Homework I
+
+### Author: Ivana Ganeva
+
+### Prof. Raül Santaeulàlia-Llopis
+### T.A.: Albert Rodriguez
+
+Dear Pof. Santaeulàlia,
+Dear Albert,
+
+I hope this message finds you well!
+
+Please, kindly find here the contents of my submission folder for HW 1:
+
+- IVANA_GANEVA.html   -> Main report with all relevant plots and comments for the tasks given
+- IVANA_GANEVA.Rmd    -> R markdown used to create the final HTML report; contains all the R codes required for the analysis and plotting
+- CODES_CHANGES.csv        -> An additional file used to link the occupations' codes correctly
+- STEM.csv                 -> An additional file used to establish the STEM-grouping of occupations based on the U.S. Census Bureau categorization
+
+The original data file extracted from the IPUMS CPS data set is larger than 25MB, so it could not be uploaded here. 
+[This link](https://mega.nz/file/tbpgVSJI#kDPf8nAB6rzsn3UGD82Zo7PRDCfrR7FUTx0I41PcSl0) goes to the location where I stored it instead, should there be a need to replicate the creation of the smaller data frames in extra folder 1.
+
+Since I will instead work with the RData file generated from the original CPS extraction when coding the analysis in R, I also provide the link to it [here](https://mega.nz/file/1PxCAAhB#sMueIEbe_vaUNXWNgQu2LwF1aMCiqHP-K9oelGuD6BA).
+
+Thank you in advance for your time,
+Ivana
